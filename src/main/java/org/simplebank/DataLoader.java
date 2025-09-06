@@ -12,25 +12,51 @@ import java.util.HashMap;
 import java.util.Map;
 
 class DataLoader {
-    private static String USER_FILE_PATH = "src/main/resources/Usersdata.txt";
-    private static String LOGS_FILE_PATH = "src/main/resources/Logs.txt";
-    private static HashMap<String, User> users;
-    private static HashMap<String, ArrayList<User>> logs;
+    private String USER_FILE_PATH = "src/main/resources/Usersdata.txt";
+    private String LOGS_FILE_PATH = "src/main/resources/Logs.txt";
+    private static DataLoader dataLoader = null;
+    private final HashMap<String, User> users;
+    private final HashMap<String, ArrayList<Transaction>> logs;
 
-    static {
-        loadUserCredentials();
+    private DataLoader() {
+        users = (HashMap<String, User>) loadData(USER_FILE_PATH);
+        logs = (HashMap<String, ArrayList<Transaction>>) loadData(LOGS_FILE_PATH);
     }
 
-    static void addUsers(String login, User newUser) {
+    static DataLoader getInstance(){
+        if(dataLoader==null){
+            dataLoader = new DataLoader();
+        }
+        return dataLoader;
+    }
+
+    Map<String, ArrayList<Transaction>> getLogs() {
+        return Collections.unmodifiableMap(logs);
+    }
+
+    ArrayList<Transaction> getLog(String login) {
+        return logs.get(login);
+    }
+
+    void addTransaction(User recipient, User sender, int value) {
+
+        Transaction transaction = new Transaction(sender.getId(), recipient.getId(), value);
+
+        logs.computeIfAbsent(recipient.getLogin(),n->new ArrayList<>()).add(transaction);
+        logs.computeIfAbsent(sender.getLogin(),n->new ArrayList<>()).add(transaction);
+
+    }
+
+
+    void addUsers(String login, User newUser) {
         users.put(login, newUser);
-        saveUserCredentials();
     }
 
-    static Map<String, User> getUsers() {
+    Map<String, User> getUsers() {
         return Collections.unmodifiableMap(users);
     }
 
-    static User getUser(String login) throws UserNotFoundException {
+    User getUser(String login) throws UserNotFoundException {
         User user = users.get(login);
 
         if (user == null) {
@@ -39,53 +65,33 @@ class DataLoader {
         return user;
     }
 
-    private static void loadUserLogs() {
-        try(ObjectInputStream objectInputStream = new ObjectInputStream(Files.newInputStream(Paths.get(LOGS_FILE_PATH)))){
+    private HashMap<?, ?> loadData(String filePath) {
+        try (ObjectInputStream objectInputStream = new ObjectInputStream(Files.newInputStream(Paths.get(filePath)))) {
 
-        isFileExists(LOGS_FILE_PATH,logs);
+            File file = new File(filePath);
+            if (!file.exists()) {
+                return new HashMap<>();
+            }
 
-        }catch(IOException exception){
-
-        }
-    }
-
-
-    private static void loadUserCredentials() {
-        try (ObjectInputStream objectInputStream = new ObjectInputStream(Files.newInputStream(Paths.get(USER_FILE_PATH)))) {
-
-            isFileExists(USER_FILE_PATH,users);
-
-            users = (HashMap<String, User>) objectInputStream.readObject();
-
+            return (HashMap<?, ?>) objectInputStream.readObject();
 
         } catch (IOException | ClassNotFoundException exception) {
-            users = new HashMap<>();
             System.out.println("Ошибка чтения данных " + exception.getMessage());
+            return new HashMap<>();
         }
     }
 
-    private static void saveUserCredentials() {
-        try (ObjectOutputStream objectOutputStream = new ObjectOutputStream(Files.newOutputStream(Paths.get(USER_FILE_PATH)))) {
-            objectOutputStream.writeObject(users);
+    private void saveData(String filePath, HashMap<?, ?> data) {
+        try (ObjectOutputStream objectOutputStream = new ObjectOutputStream(Files.newOutputStream(Paths.get(filePath)))) {
+            objectOutputStream.writeObject(data);
 
         } catch (IOException exception) {
             System.out.println("Ошибка сохранения данных");
         }
     }
 
-    private static <T> HashMap<String,T> readFile(String filePath,HashMap<String,T> map,ObjectInputStream objectInputStream) {
-
-        File file = new File(filePath);
-        if (!file.exists()) {
-            return new HashMap<>();
-        }
-
-        try {
-            map = (HashMap<String, T>) objectInputStream.readObject();
-        }catch(ClassNotFoundException | IOException exception){
-            System.out.println("Ошибка чтения данных");
-        }
+    void close() {
+        saveData(USER_FILE_PATH, users);
+        saveData(LOGS_FILE_PATH, logs);
     }
-
-
 }
